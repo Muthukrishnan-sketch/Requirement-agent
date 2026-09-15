@@ -180,8 +180,7 @@ def get_shortlist(shortlist_id: int) -> dict | None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--http", action="store_true",
-                         help="Serve over Streamable HTTP instead of stdio")
+    parser.add_argument("--http", action="store_true")
     parser.add_argument("--port", type=int, default=8001)
     args = parser.parse_args()
 
@@ -190,10 +189,10 @@ def main():
     if args.http:
         mcp.settings.port = args.port
         mcp.settings.host = "0.0.0.0"
+        mcp.settings.allowed_hosts = ["*"]  # ← ADD THIS LINE
         mcp.run(transport="streamable-http")
     else:
         mcp.run()
-
 
 if __name__ == "__main__":
     main()
