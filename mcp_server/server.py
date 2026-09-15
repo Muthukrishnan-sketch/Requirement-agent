@@ -188,16 +188,19 @@ def main():
 
     if args.http:
         import uvicorn
-        from starlette.middleware.trustedhost import TrustedHostMiddleware
-
-        mcp.settings.port = args.port
         mcp.settings.host = "0.0.0.0"
+        mcp.settings.port = args.port
 
-        # Get the underlying Starlette app from FastMCP and allow all hosts
+        # Get the app and run with uvicorn directly, disabling host header checks
         app = mcp.streamable_http_app()
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
-        uvicorn.run(app, host="0.0.0.0", port=args.port)
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=args.port,
+            forwarded_allow_ips="*",  # trust Render's proxy
+            proxy_headers=True,  # honour X-Forwarded-* headers
+        )
     else:
         mcp.run()
 
