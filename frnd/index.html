@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recruitment Desk — AI Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #22304A;
+    --ink-soft: #4B5C78;
+    --paper: #FBF9F4;
+    --paper-line: #E4DFD2;
+    --panel: #FFFFFF;
+    --marker: #C98A2C;
+    --marker-soft: #F3E4C8;
+    --match: #3F6E52;
+    --match-bg: #E7F0E9;
+    --missing: #A6503A;
+    --missing-bg: #F5E7E2;
+    --mono: "IBM Plex Mono", monospace;
+    --sans: "IBM Plex Sans", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  header {
+    padding: 28px 32px 20px;
+    border-bottom: 1px solid var(--paper-line);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    margin: 6px 0 0;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 10px;
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #9AA5B8;
+  }
+  .dot.ok { background: var(--match); }
+  .dot.err { background: var(--missing); }
+
+  main {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 0;
+    min-height: calc(100vh - 96px);
+  }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  .desk {
+    padding: 28px 28px 28px;
+    border-right: 1px solid var(--paper-line);
+  }
+  .desk label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 14px;
+    font-family: var(--sans);
+    font-size: 14.5px;
+    line-height: 1.5;
+    border: 1px solid var(--paper-line);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--ink);
+    resize: vertical;
+  }
+  textarea:focus { outline: 2px solid var(--marker); outline-offset: 1px; }
+
+  button.ask {
+    margin-top: 12px;
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    border-radius: 4px;
+    font-family: var(--sans);
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.ask:hover { background: #1a2438; }
+  button.ask:disabled { background: #9AA5B8; cursor: default; }
+
+  .examples {
+    margin-top: 28px;
+  }
+  .examples h3 {
+    font-size: 12px;
+    text-transform: none;
+    color: var(--ink-soft);
+    margin: 0 0 10px;
+    font-weight: 600;
+  }
+  .example {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 9px 10px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--paper-line);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+  .example:hover { border-color: var(--marker); }
+
+  .desk-url {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px solid var(--paper-line);
+  }
+  .desk-url label { font-size: 11px; color: var(--ink-soft); }
+  .desk-url input {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 7px 9px;
+    border: 1px solid var(--paper-line);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--ink-soft);
+  }
+
+  .roster {
+    padding: 28px 32px 40px;
+  }
+  .roster-empty {
+    color: var(--ink-soft);
+    font-size: 14px;
+    padding-top: 40px;
+    max-width: 420px;
+  }
+  .roster-empty .mark { color: var(--marker); font-family: var(--mono); }
+
+  .trace {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: #F2EFE6;
+    border: 1px solid var(--paper-line);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 18px;
+    white-space: pre-wrap;
+  }
+
+  .answer {
+    font-size: 14.5px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  .loading {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .loading::after {
+    content: "";
+    display: inline-block;
+    width: 6px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Recruitment Desk</h1>
+  <p>Ask in plain language — the agent ranks and shortlists real candidates from your database.</p>
+  <div class="status" id="statusLine">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">checking agent connection…</span>
+  </div>
+</header>
+
+<main>
+  <section class="desk">
+    <label for="msg">Your request</label>
+    <textarea id="msg" placeholder="Find the top 5 Python developers with at least 2 years of experience for job 1 and shortlist them">Find the top 5 Python developers with at least 2 years of experience for job 1 and shortlist them</textarea>
+    <button class="ask" id="askBtn" onclick="ask()">Ask the agent</button>
+
+    <div class="examples">
+      <h3>Try one of these</h3>
+      <button class="example" onclick="setMsg(this)">Find the top 3 Java developers with at least 2 years of experience for job 1 and shortlist them</button>
+      <button class="example" onclick="setMsg(this)">List all open jobs</button>
+      <button class="example" onclick="setMsg(this)">Show me shortlist 1</button>
+    </div>
+
+    <div class="desk-url">
+      <label>Agent API URL</label>
+      <input id="apiUrl" value="http://127.0.0.1:8003" />
+    </div>
+  </section>
+
+  <section class="roster" id="roster">
+    <div class="roster-empty">
+      <p><span class="mark">→</span> No request yet. Type what you're looking for on the left, in plain English, and press <strong>Ask the agent</strong>.</p>
+      <p>The agent will decide which tools to call — searching, ranking, and shortlisting — using your live candidate database.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+async function checkHealth() {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  const apiUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+  try {
+    const resp = await fetch(apiUrl + '/health');
+    if (resp.ok) {
+      dot.className = 'dot ok';
+      text.textContent = 'agent API connected';
+    } else {
+      throw new Error('bad status');
+    }
+  } catch (e) {
+    dot.className = 'dot err';
+    text.textContent = 'agent API not reachable — is it running on port 8003?';
+  }
+}
+
+function setMsg(btn) {
+  document.getElementById('msg').value = btn.textContent;
+}
+
+async function ask() {
+  const btn = document.getElementById('askBtn');
+  const msg = document.getElementById('msg').value.trim();
+  const apiUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+  const roster = document.getElementById('roster');
+
+  if (!msg) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+  roster.innerHTML = '<div class="loading">Waiting on the agent — it may call several tools before answering…</div>';
+
+  try {
+    const resp = await fetch(apiUrl + '/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
+    });
+    const data = await resp.json();
+    renderAnswer(data.response);
+  } catch (e) {
+    roster.innerHTML = `<div class="roster-empty"><p><span class="mark">✕</span> Could not reach the agent API at ${apiUrl}. Make sure ai_agent.api is running (uvicorn ai_agent.api:app --port 8003), along with the MCP server, Gateway, and Ollama.</p></div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ask the agent';
+  }
+}
+
+function renderAnswer(text) {
+  const roster = document.getElementById('roster');
+  roster.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'answer';
+  div.textContent = text;
+  roster.appendChild(div);
+}
+
+checkHealth();
+</script>
+
+</body>
+</html>

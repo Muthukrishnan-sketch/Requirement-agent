@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Recruitment Agent — Demo</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 900px; margin: 40px auto; background: #f4f6fb; color: #1a1a2e; }
+  h1 { color: #1E2761; }
+  .card { background: white; border-radius: 10px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px; }
+  label { display: block; margin-top: 12px; font-weight: 600; font-size: 14px; }
+  input { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #cdd5e6; border-radius: 6px; box-sizing: border-box; }
+  button { margin-top: 18px; background: #1E2761; color: white; border: none; padding: 10px 22px; border-radius: 6px; cursor: pointer; font-size: 15px; }
+  button:hover { background: #2b3a8f; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+  th { background: #f0f3fa; }
+  .score { font-weight: 700; color: #2C8C4A; }
+  .rank { font-weight: 700; color: #F2B134; }
+  .error { color: #c0392b; margin-top: 10px; }
+  .status { font-size: 13px; color: #5A6B8C; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h1>AI Recruitment Agent</h1>
+  <p class="status">Talks directly to the Backend API's <code>/match</code> endpoint — real candidate data, real scoring.</p>
+
+  <div class="card">
+    <label>Backend URL</label>
+    <input id="apiUrl" value="http://127.0.0.1:8002" />
+
+    <label>Required skills (comma-separated)</label>
+    <input id="skills" value="python, fastapi" />
+
+    <label>Minimum years of experience</label>
+    <input id="minExp" type="number" step="0.5" value="2" />
+
+    <label>How many to show (top K)</label>
+    <input id="topK" type="number" value="5" />
+
+    <button onclick="runMatch()">Find & Rank Candidates</button>
+    <div id="err" class="error"></div>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <h3>Ranked Results</h3>
+    <table id="resultsTable">
+      <thead><tr><th>Rank</th><th>Name</th><th>Title</th><th>Score</th><th>Matched Skills</th><th>Years Exp.</th></tr></thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+
+<script>
+async function runMatch() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  const apiUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+  const skills = document.getElementById('skills').value.split(',').map(s => s.trim()).filter(Boolean);
+  const minExp = parseFloat(document.getElementById('minExp').value) || 0;
+  const topK = parseInt(document.getElementById('topK').value) || 5;
+
+  try {
+    const resp = await fetch(apiUrl + '/match', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ required_skills: skills, min_experience: minExp, top_k: topK })
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error('Backend returned ' + resp.status + ': ' + body);
+    }
+    const results = await resp.json();
+    renderResults(results);
+  } catch (e) {
+    err.textContent = 'Could not reach the backend. Is it running at ' + apiUrl + '? (' + e.message + ')';
+    document.getElementById('resultsCard').style.display = 'none';
+  }
+}
+
+function renderResults(results) {
+  const body = document.getElementById('resultsBody');
+  body.innerHTML = '';
+  results.forEach((r, i) => {
+    const c = r.candidate;
+    const bd = r.score_breakdown || {};
+    const matched = (bd.matched_skills || []).join(', ') || '—';
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="rank">#${i + 1}</td>
+      <td>${c.full_name}</td>
+      <td>${c.current_title || '—'}</td>
+      <td class="score">${r.score}</td>
+      <td>${matched}</td>
+      <td>${c.years_experience}</td>
+    `;
+    body.appendChild(row);
+  });
+  document.getElementById('resultsCard').style.display = results.length ? 'block' : 'none';
+}
+</script>
+</body>
+</html>
