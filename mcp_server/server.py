@@ -189,6 +189,7 @@ def main():
 
     if args.http:
         mcp.settings.port = args.port
+        mcp.settings.host = "0.0.0.0"
         mcp.run(transport="streamable-http")
     else:
         mcp.run()
