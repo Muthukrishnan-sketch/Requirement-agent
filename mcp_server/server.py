@@ -187,12 +187,22 @@ def main():
     init_db()
 
     if args.http:
+        import uvicorn
+        from starlette.middleware.trustedhost import TrustedHostMiddleware
+
         mcp.settings.port = args.port
         mcp.settings.host = "0.0.0.0"
-        mcp.settings.allowed_hosts = ["*"]  # ← ADD THIS LINE
-        mcp.run(transport="streamable-http")
+
+        # Get the underlying Starlette app from FastMCP and allow all hosts
+        app = mcp.streamable_http_app()
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+
+        uvicorn.run(app, host="0.0.0.0", port=args.port)
     else:
         mcp.run()
 
+
 if __name__ == "__main__":
     main()
+
+
