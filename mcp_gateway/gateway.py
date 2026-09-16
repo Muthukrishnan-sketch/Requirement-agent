@@ -106,6 +106,8 @@ async def list_tools(identity: dict = Depends(get_current_identity)):
              if allowed == "*" or t.name in allowed]
     return {"role": identity["role"], "allowed_tools": names}
 
+# Add this import at the top of gateway.py
+from mcp_server.server import mcp as mcp_server_instance
 
 @app.post("/call_tool")
 async def call_tool(req: ToolCallRequest, identity: dict = Depends(get_current_identity)):
@@ -119,48 +121,32 @@ async def call_tool(req: ToolCallRequest, identity: dict = Depends(get_current_i
                              detail=f"Role '{identity['role']}' may not call '{req.tool_name}'")
 
     try:
-        # Replace streamablehttp_client with plain httpx POST
-        # Send as JSON-RPC directly to MCP server, bypassing host-check issue
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            rpc_payload = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": req.tool_name,
-                    "arguments": req.arguments
-                }
-            }
-            # Use IP directly to avoid host header mismatch
-            resp = await client.post(
-                MCP_SERVER_URL,
-                json=rpc_payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Host": "localhost",  # override host header
-                }
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        # Call MCP tool directly as Python function — no HTTP hop
+        tool_func = None
+        for tool in mcp_server_instance._tool_manager._tools.values():
+            if tool.name == req.tool_name:
+                tool_func = tool
+                break
 
+        if tool_func is None:
+            raise ValueError(f"Tool '{req.tool_name}' not found")
+
+        result = await tool_func.run(req.arguments)
         latency = (time.perf_counter() - start) * 1000
 
-        # Extract result from JSON-RPC response
-        if "error" in data:
-            raise Exception(data["error"].get("message", "MCP error"))
-
-        result_content = data.get("result", {}).get("content", [])
+        # Wrap result in MCP content block format
+        import json
+        content = [{"type": "text", "text": json.dumps(result, default=str)}]
         _write_audit(identity["sub"], identity["role"], req.tool_name, req.arguments,
                      "success", None, latency)
-        return {"tool_name": req.tool_name, "result": result_content, "is_error": False}
+        return {"tool_name": req.tool_name, "result": content, "is_error": False}
 
     except Exception as exc:
         latency = (time.perf_counter() - start) * 1000
         _write_audit(identity["sub"], identity["role"], req.tool_name, req.arguments,
                      "error", f"{type(exc).__name__}: {exc}", latency)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
-                             detail=f"Upstream MCP tool call failed: {exc}") from exc
-
+                             detail=f"Tool call failed: {exc}") from exc
 @app.get("/audit_logs")
 def get_audit_logs(identity: dict = Depends(get_current_identity), limit: int = 100):
     """Admin-only: view the audit trail."""
