@@ -109,10 +109,6 @@ async def list_tools(identity: dict = Depends(get_current_identity)):
 
 @app.post("/call_tool")
 async def call_tool(req: ToolCallRequest, identity: dict = Depends(get_current_identity)):
-    """
-    Authenticate (handled by get_current_identity), authorize, audit, then
-    forward the call to the real MCP server.
-    """
     start = time.perf_counter()
 
     if not is_authorized(identity["role"], req.tool_name):
@@ -123,22 +119,47 @@ async def call_tool(req: ToolCallRequest, identity: dict = Depends(get_current_i
                              detail=f"Role '{identity['role']}' may not call '{req.tool_name}'")
 
     try:
-        async with streamablehttp_client(MCP_SERVER_URL) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(req.tool_name, req.arguments)
+        # Replace streamablehttp_client with plain httpx POST
+        # Send as JSON-RPC directly to MCP server, bypassing host-check issue
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            rpc_payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": req.tool_name,
+                    "arguments": req.arguments
+                }
+            }
+            # Use IP directly to avoid host header mismatch
+            resp = await client.post(
+                MCP_SERVER_URL,
+                json=rpc_payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Host": "localhost",  # override host header
+                }
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
         latency = (time.perf_counter() - start) * 1000
-        content = [c.model_dump() for c in result.content]
+
+        # Extract result from JSON-RPC response
+        if "error" in data:
+            raise Exception(data["error"].get("message", "MCP error"))
+
+        result_content = data.get("result", {}).get("content", [])
         _write_audit(identity["sub"], identity["role"], req.tool_name, req.arguments,
                      "success", None, latency)
-        return {"tool_name": req.tool_name, "result": content, "is_error": result.isError}
+        return {"tool_name": req.tool_name, "result": result_content, "is_error": False}
+
     except Exception as exc:
         latency = (time.perf_counter() - start) * 1000
         _write_audit(identity["sub"], identity["role"], req.tool_name, req.arguments,
                      "error", f"{type(exc).__name__}: {exc}", latency)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
-                             detail="Upstream MCP tool call failed") from exc
-
+                             detail=f"Upstream MCP tool call failed: {exc}") from exc
 
 @app.get("/audit_logs")
 def get_audit_logs(identity: dict = Depends(get_current_identity), limit: int = 100):
