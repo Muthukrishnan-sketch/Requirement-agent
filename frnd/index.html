@@ -241,17 +241,16 @@ async function checkHealth() {
   const text = document.getElementById('statusText');
   const apiUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
   try {
-    const resp = await fetch(apiUrl + '/health');
-    if (resp.ok) {
-      dot.className = 'dot ok';
-      text.textContent = 'agent API connected';
-    } else {
-      throw new Error('bad status');
-    }
-  } catch (e) {
-    dot.className = 'dot err';
-    text.textContent = 'agent API not reachable — is it running on port 8003?';
+const resp = await fetch(apiUrl + '/health', {
+  headers: {
+    'ngrok-skip-browser-warning': 'true'
   }
+});
+if (resp.ok) {
+  dot.className = 'dot ok';
+  text.textContent = 'agent API connected';
+} else {
+  throw new Error('bad status');
 }
 
 function setMsg(btn) {
@@ -272,10 +271,13 @@ async function ask() {
 
   try {
     const resp = await fetch(apiUrl + '/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg })
-    });
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
+    },
+    body: JSON.stringify({message: query})
+  });
     const data = await resp.json();
     renderAnswer(data.response);
   } catch (e) {
