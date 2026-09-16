@@ -188,18 +188,29 @@ def main():
 
     if args.http:
         import uvicorn
-        mcp.settings.host = "0.0.0.0"
-        mcp.settings.port = args.port
+        from starlette.applications import Starlette
+        from starlette.middleware import Middleware
+        from starlette.middleware.trustedhost import TrustedHostMiddleware
+        from starlette.routing import Mount
 
-        # Get the app and run with uvicorn directly, disabling host header checks
-        app = mcp.streamable_http_app()
+        # Get FastMCP's internal app
+        fastmcp_app = mcp.streamable_http_app()
+
+        # Wrap it in a new Starlette app that allows all hosts
+        # This intercepts BEFORE FastMCP's host check
+        app = Starlette(
+            routes=[Mount("/", app=fastmcp_app)],
+            middleware=[
+                Middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+            ]
+        )
 
         uvicorn.run(
             app,
             host="0.0.0.0",
             port=args.port,
-            forwarded_allow_ips="*",  # trust Render's proxy
-            proxy_headers=True,  # honour X-Forwarded-* headers
+            proxy_headers=True,
+            forwarded_allow_ips="*",
         )
     else:
         mcp.run()
@@ -207,5 +218,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
