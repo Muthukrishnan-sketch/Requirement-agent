@@ -386,3 +386,34 @@ if __name__ == "__main__":
     )
     print(f"Recruiter request: {query}\n")
     print(run_agent(query))
+
+def call_tool(self, tool_name: str, arguments: dict) -> dict:
+    if not self._token:
+        self.login()
+    resp = self._client.post(
+        "/call_tool",
+        json={"tool_name": tool_name, "arguments": arguments},
+        headers={"Authorization": f"Bearer {self._token}"},
+    )
+    if resp.status_code == 403:
+        return {"error": f"Not authorized to call {tool_name}: {resp.json()['detail']}"}
+
+    # ADD THESE 3 LINES to see real errors:
+    if not resp.ok:
+        print(f"  [gateway error] {resp.status_code}: {resp.text}", file=sys.stderr)
+        return {"error": f"Gateway returned {resp.status_code}: {resp.text}"}
+
+    resp.raise_for_status()
+    payload = resp.json()
+    results = []
+    for block in payload["result"]:
+        if block.get("type") == "text":
+            try:
+                results.append(json.loads(block["text"]))
+            except json.JSONDecodeError:
+                results.append(block["text"])
+    if not results:
+        return payload
+    if len(results) == 1:
+        return results[0]
+    return results
