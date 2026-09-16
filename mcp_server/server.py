@@ -187,35 +187,28 @@ def main():
     init_db()
 
     if args.http:
-        import uvicorn
-        from starlette.applications import Starlette
-        from starlette.middleware import Middleware
-        from starlette.middleware.trustedhost import TrustedHostMiddleware
-        from starlette.routing import Mount
+        # Patch FastMCP's transport security to skip host validation
+        from mcp.server import transport_security
+        original_call = transport_security.TransportSecurityMiddleware.__call__
 
-        # Get FastMCP's internal app
-        fastmcp_app = mcp.streamable_http_app()
+        async def patched_call(self, scope, receive, send):
+            if scope.get("type") == "http":
+                # Remove host validation by clearing allowed_hosts check
+                scope = dict(scope)
+                scope["headers"] = [
+                    (k, v) for k, v in scope.get("headers", [])
+                    if k.lower() != b"host"
+                ] + [(b"host", b"localhost")]
+            await original_call(self, scope, receive, send)
 
-        # Wrap it in a new Starlette app that allows all hosts
-        # This intercepts BEFORE FastMCP's host check
-        app = Starlette(
-            routes=[Mount("/", app=fastmcp_app)],
-            middleware=[
-                Middleware(TrustedHostMiddleware, allowed_hosts=["*"])
-            ]
-        )
+        transport_security.TransportSecurityMiddleware.__call__ = patched_call
 
-        uvicorn.run(
-            app,
-            host="0.0.0.0",
-            port=args.port,
-            proxy_headers=True,
-            forwarded_allow_ips="*",
-        )
+        mcp.settings.host = "0.0.0.0"
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")
     else:
         mcp.run()
 
 
 if __name__ == "__main__":
     main()
-
